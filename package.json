@@ -2,6 +2,13 @@
   "name": "dsh-tui",
   "version": "0.1.0",
   "description": "An interactive terminal surface for DeepSeek Harness",
+  "keywords": ["deepseek", "terminal", "tui", "agent"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoshihou514/dsh-tui.git"
+  },
+  "bugs": "https://github.com/xiaoshihou514/dsh-tui/issues",
+  "homepage": "https://github.com/xiaoshihou514/dsh-tui#readme",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -28,7 +35,9 @@
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",
+    "lint:package": "publint --strict --pack=false",
     "test": "vitest run",
+    "prepublishOnly": "pnpm run check && pnpm test && pnpm run build && pnpm run lint:package",
     "prepare": "pnpm run build"
   },
   "dsh": {
@@ -38,6 +47,10 @@
   },
   "engines": {
     "node": "^22.19.0 || >=24"
+  },
+  "packageManager": "pnpm@11.19.0",
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "@deepseek-ai/dsh-cmdline": "^0.1.0-rc.5",
@@ -69,6 +82,7 @@
     "@deepseek-ai/dsh-user-questions": "^0.1.0-rc.5",
     "@types/node": "^22.20.0",
     "@types/react": "^19.1.10",
+    "publint": "^0.3.21",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
