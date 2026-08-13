@@ -68,4 +68,23 @@ describe('projectTranscript', () => {
     ])
     expect(rows).toEqual([{ id: 'turn-1', kind: 'notice', text: 'UPSTREAM: offline', tone: 'error' }])
   })
+
+  it('bounds tool previews without changing ordinary output', () => {
+    const callId = CallId('large-call')
+    const result = createToolResultMessage({
+      callId,
+      content: [{ type: 'text', text: 'x'.repeat(7_000) }],
+      isError: false,
+    })
+    const rows = projectTranscript([
+      event('tool/call', 0, { turn: 1, step: 1, callId, name: 'bash', arguments: 'a'.repeat(3_000) }),
+      event('tool/result', 1, { turn: 1, step: 1, message: result }, true),
+    ])
+    const row = rows[0]
+    expect(row?.kind).toBe('tool')
+    if (row?.kind !== 'tool') throw new Error('expected tool row')
+    expect(row.arguments.length).toBeLessThan(2_100)
+    expect(row.result?.length).toBeLessThan(6_100)
+    expect(row.result).toContain('session log keeps the complete value')
+  })
 })

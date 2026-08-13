@@ -17,6 +17,11 @@ function blocksText(blocks: readonly ContentBlock[]): string {
     .join('')
 }
 
+function clip(text: string, maxChars: number): string {
+  if (text.length <= maxChars) return text
+  return `${text.slice(0, maxChars)}\n... terminal preview truncated; the session log keeps the complete value`
+}
+
 function reasoningText(blocks: readonly ContentBlock[]): string {
   return blocks
     .filter((block): block is Extract<ContentBlock, { type: 'reasoning' }> => block.type === 'reasoning')
@@ -26,7 +31,7 @@ function reasoningText(blocks: readonly ContentBlock[]): string {
 
 function resultText(event: SessionEvent<'tool/result'>): string {
   const block = event.data.message.content[0]
-  return blocksText(block.content)
+  return clip(blocksText(block.content), 6_000)
 }
 
 function turnNotice(event: SessionEvent<'turn/end'>): TranscriptEntry | undefined {
@@ -121,7 +126,7 @@ export function projectTranscript(events: readonly SessionEvent[]): TranscriptEn
           id: `tool-${String(event.data.callId)}`,
           kind: 'tool',
           name: event.data.name,
-          arguments: event.data.arguments,
+          arguments: clip(event.data.arguments, 2_000),
           isError: false,
         }
         tools.set(String(event.data.callId), row)
@@ -138,7 +143,7 @@ export function projectTranscript(events: readonly SessionEvent[]): TranscriptEn
           rows.push({
             id: `tool-${callId}`,
             kind: 'tool',
-            name: event.data.message.source.kind === 'tool' ? 'tool' : 'tool',
+            name: 'tool result',
             arguments: '',
             result,
             isError: block.isError === true,

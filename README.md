@@ -17,7 +17,7 @@ dsh plugin --profile tui add github:xiaoshihou514/dsh-tui
 dsh --profile tui
 ```
 
-pnpm 10 and later may block the package's `prepare` script on the first Git install. If that happens, copy the package key from pnpm's error into the profile's `pnpm-workspace.yaml` under `allowBuilds`, then run the install command again. The script compiles the TypeScript entry points shipped by this repository. Registry packages and release tarballs contain built files and do not need install-time build permission.
+pnpm 10 and later may block the package's `prepare` script on the first Git install. If that happens, copy the package key from pnpm's error into the profile's `pnpm-workspace.yaml` under `allowBuilds`, then run the install command again. The script compiles the TypeScript entry points shipped by this repository. A tarball produced by `pnpm pack` contains the built files and does not need install-time build permission.
 
 To install a local checkout:
 
@@ -59,6 +59,7 @@ Surface replacement records created by compaction stay out of the human transcri
 - Every launch creates a new session. Session resume and selection are not available yet.
 - The composer is single-line and does not accept attachments.
 - Tool output is rendered as text. Harness tool-specific render intents are not interpreted yet.
+- Tool arguments and results use bounded terminal previews. The durable session log keeps the complete values.
 - Subagent events remain in the parent session's ordinary tool transcript; there is no separate subagent view.
 
 ## Development

@@ -41,6 +41,7 @@ function Approval({ controller, toolName, reason }: {
   reason?: string
 }): React.JSX.Element {
   useInput((input, key) => {
+    if (input === 'c' && key.ctrl) controller.cancel()
     if (input.toLowerCase() === 'y') controller.decideApproval('allowed-once')
     if (input.toLowerCase() === 'n' || key.escape) controller.decideApproval('rejected')
   })
@@ -78,6 +79,9 @@ function Question({ controller, questions }: {
   const [value, setValue] = useState('')
   const [answers, setAnswers] = useState<AskUserQuestionAnswerItem[]>([])
   const question = questions[index]
+  useInput((input, key) => {
+    if (key.escape || (input === 'c' && key.ctrl)) controller.cancel()
+  })
   if (question === undefined) return <Text color="red">Invalid empty question request.</Text>
 
   const submit = (input: string): void => {
