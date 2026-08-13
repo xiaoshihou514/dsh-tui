@@ -34,7 +34,7 @@
   ],
   "scripts": {
     "build": "tsdown",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc -p tsconfig.test.json",
     "lint:package": "publint --strict --pack=false",
     "test": "vitest run",
     "prepublishOnly": "pnpm run check && pnpm test && pnpm run build && pnpm run lint:package",

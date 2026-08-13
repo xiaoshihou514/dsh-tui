@@ -40,7 +40,7 @@ interface RuntimeIo {
 }
 
 /** Process integrations replaced by focused runtime tests. */
-export const internals: Pick<RuntimeIo, 'stderr' | 'render'> = {
+export const internals: { stderr: RuntimeIo['stderr']; render: RuntimeIo['render'] } = {
   stderr: process.stderr,
   render: renderTui,
 }
