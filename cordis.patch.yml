@@ -1,0 +1,16 @@
+# dsh-tui is a terminal surface over the shared Harness base bundle. The
+# startup provider owns command-line parsing; the runtime owns the root agent
+# and terminal lifecycle.
+
+- insert:
+    - id: code-runtime
+      name: '@deepseek-ai/dsh-code-runtime-worker-thread'
+
+    - id: tui-startup
+      name: 'dsh-tui/startup'
+
+    - id: tui-runtime
+      name: 'dsh-tui'
+      inject: [tuiStartup]
+      config:
+        initialPrompt: !!js ctx.tuiStartup.initialPrompt
