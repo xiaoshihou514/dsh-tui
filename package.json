@@ -28,6 +28,7 @@
   "scripts": {
     "build": "tsdown",
     "check": "tsc --noEmit",
+    "test": "vitest run",
     "prepare": "pnpm run build"
   },
   "dsh": {
@@ -41,7 +42,10 @@
   "dependencies": {
     "@deepseek-ai/dsh-cmdline": "^0.1.0-rc.5",
     "@deepseek-ai/schemastery": "^3.18.1",
-    "commander": "^15.0.0"
+    "commander": "^15.0.0",
+    "ink": "^6.3.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.1.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.0",
@@ -63,8 +67,10 @@
     "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.5",
     "@deepseek-ai/dsh-user-questions": "^0.1.0-rc.5",
     "@types/node": "^22.20.0",
+    "@types/react": "^19.1.10",
     "tsdown": "^0.22.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
   },
   "license": "MIT"
 }
