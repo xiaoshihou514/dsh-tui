@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-cmdline": "^0.1.0-rc.5",
+    "@deepseek-ai/dsh-code-runtime-worker-thread": "^0.1.0-rc.5",
     "@deepseek-ai/schemastery": "^3.18.1",
     "commander": "^15.0.0",
     "ink": "^6.3.1",
