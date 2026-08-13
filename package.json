@@ -4,14 +4,14 @@
   "description": "An interactive terminal surface for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
+  "types": "lib/index.d.ts",
   "exports": {
     ".": {
-      "types": "./lib/types/index.d.ts",
+      "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
     "./startup": {
-      "types": "./lib/types/startup.d.ts",
+      "types": "./lib/startup.d.ts",
       "default": "./lib/startup.js"
     },
     "./cordis.patch.yml": "./cordis.patch.yml",
@@ -20,7 +20,7 @@
   "files": [
     "lib/index.js",
     "lib/startup.js",
-    "lib/types/**/*.d.ts",
+    "lib/*.d.ts",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
