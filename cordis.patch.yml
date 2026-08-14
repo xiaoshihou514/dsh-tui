@@ -6,6 +6,35 @@
     - id: code-runtime
       name: '@deepseek-ai/dsh-code-runtime-worker-thread'
 
+    # Match WebUI's durable workspace registry so archive state and session
+    # visibility are shared between both surfaces.
+    - id: storage
+      name: '@deepseek-ai/dsh-storage'
+
+    - id: storage-json
+      name: '@deepseek-ai/dsh-storage-json'
+      config:
+        root: !!js dshHomePath('storages')
+
+    - id: storage-domain
+      name: '@deepseek-ai/dsh-storage-domain'
+      config:
+        backend: json
+
+    - id: workspace
+      name: '@deepseek-ai/dsh-workspace'
+
+    # Read the same cheap conversation summaries as WebUI. This lets the
+    # chooser suppress abandoned zero-turn sessions without loading logs.
+    - id: session-stats
+      name: '@deepseek-ai/dsh-session-stats'
+
+    - id: session-projection-cache
+      name: '@deepseek-ai/dsh-session-projection-cache'
+      config:
+        writeEveryEvents: 200
+        writeIntervalMs: 5000
+
     - id: tui-startup
       name: 'dsh-tui/startup'
 
@@ -14,3 +43,5 @@
       inject: [tuiStartup]
       config:
         initialPrompt: !!js ctx.tuiStartup.initialPrompt
+        globalSession: !!js ctx.tuiStartup.globalSession
+        sessionId: !!js ctx.tuiStartup.sessionId

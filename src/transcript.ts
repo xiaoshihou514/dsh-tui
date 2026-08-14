@@ -2,12 +2,14 @@
 
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { isAppendSurfaceEvent, type SessionEvent } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-commands/types'
 
 /** One row rendered in the terminal transcript. */
 export type TranscriptEntry =
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'assistant'; text: string; reasoning?: string; streaming: boolean }
   | { id: string; kind: 'tool'; name: string; arguments: string; result?: string; isError: boolean }
+  | { id: string; kind: 'command'; name: string; arguments?: string; result?: string; isError: boolean }
   | { id: string; kind: 'notice'; text: string; tone: 'muted' | 'error' }
 
 function blocksText(blocks: readonly ContentBlock[]): string {
@@ -65,53 +67,60 @@ function turnNotice(event: SessionEvent<'turn/end'>): TranscriptEntry | undefine
 }
 
 /**
- * Rebuild the visible transcript from the canonical event log.
+ * Incremental projector from the append-only durable log to transcript rows.
  *
- * Final assistant messages replace their raw streaming chunks. Surface
+ * The durable log only grows, so the projector folds events one at a time and
+ * keeps the complete transcript without ever re-scanning the prefix. A
+ * final `assistant/message` replaces its raw streaming chunks in place; surface
  * replacement records stay model-only, matching Harness's human-transcript
- * contract.
+ * contract. The terminal owns scrolling and history, so no windowing happens
+ * here.
  */
-export function projectTranscript(events: readonly SessionEvent[]): TranscriptEntry[] {
-  const finalizedSteps = new Set<string>()
-  for (const event of events) {
-    if (event.type === 'assistant/message') {
-      finalizedSteps.add(`${event.data.turn}/${event.data.step}`)
-    }
-  }
+export class TranscriptProjector {
+  readonly entries: TranscriptEntry[] = []
+  private readonly finalizedSteps = new Set<string>()
+  private readonly streaming = new Map<string, Extract<TranscriptEntry, { kind: 'assistant' }>>()
+  private readonly tools = new Map<string, Extract<TranscriptEntry, { kind: 'tool' }>>()
+  private readonly commands = new Map<string, Extract<TranscriptEntry, { kind: 'command' }>>()
 
-  const rows: TranscriptEntry[] = []
-  const streaming = new Map<string, Extract<TranscriptEntry, { kind: 'assistant' }>>()
-  const tools = new Map<string, Extract<TranscriptEntry, { kind: 'tool' }>>()
-
-  for (const event of events) {
+  /** Fold one more durable event into the transcript. */
+  push(event: SessionEvent): void {
     switch (event.type) {
       case 'user/message': {
         if (!isAppendSurfaceEvent(event) || event.data.source.kind !== 'user') break
         const text = blocksText(event.data.content)
-        if (text !== '') rows.push({ id: `event-${event.seq}`, kind: 'user', text })
+        if (text !== '') this.entries.push({ id: `event-${event.seq}`, kind: 'user', text })
         break
       }
       case 'assistant/chunk': {
         const key = `${event.data.turn}/${event.data.step}`
-        if (finalizedSteps.has(key)) break
+        if (this.finalizedSteps.has(key)) break
         const chunk = event.data.chunk
         if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') break
-        let row = streaming.get(key)
+        let row = this.streaming.get(key)
         if (row === undefined) {
           row = { id: `stream-${key}`, kind: 'assistant', text: '', streaming: true }
-          streaming.set(key, row)
-          rows.push(row)
+          this.streaming.set(key, row)
+          this.entries.push(row)
         }
         if (chunk.type === 'text-delta') row.text += chunk.text
         else row.reasoning = (row.reasoning ?? '') + chunk.text
         break
       }
       case 'assistant/message': {
+        const key = `${event.data.turn}/${event.data.step}`
+        this.finalizedSteps.add(key)
+        const live = this.streaming.get(key)
+        if (live !== undefined) {
+          this.streaming.delete(key)
+          const index = this.entries.indexOf(live)
+          if (index !== -1) this.entries.splice(index, 1)
+        }
         if (!isAppendSurfaceEvent(event)) break
         const text = blocksText(event.data.message.content)
         const reasoning = reasoningText(event.data.message.content)
         if (text !== '' || reasoning !== '') {
-          rows.push({
+          this.entries.push({
             id: `event-${event.seq}`,
             kind: 'assistant',
             text,
@@ -129,18 +138,18 @@ export function projectTranscript(events: readonly SessionEvent[]): TranscriptEn
           arguments: clip(event.data.arguments, 2_000),
           isError: false,
         }
-        tools.set(String(event.data.callId), row)
-        rows.push(row)
+        this.tools.set(String(event.data.callId), row)
+        this.entries.push(row)
         break
       }
       case 'tool/result': {
         if (!isAppendSurfaceEvent(event)) break
         const callId = String(event.data.message.source.callId)
-        const row = tools.get(callId)
+        const row = this.tools.get(callId)
         const result = resultText(event)
         const block = event.data.message.content[0]
         if (row === undefined) {
-          rows.push({
+          this.entries.push({
             id: `tool-${callId}`,
             kind: 'tool',
             name: 'tool result',
@@ -156,12 +165,37 @@ export function projectTranscript(events: readonly SessionEvent[]): TranscriptEn
       }
       case 'turn/end': {
         const notice = turnNotice(event)
-        if (notice !== undefined) rows.push(notice)
+        if (notice !== undefined) this.entries.push(notice)
+        break
+      }
+      case 'command/run': {
+        const row: Extract<TranscriptEntry, { kind: 'command' }> = {
+          id: `command-${String(event.data.commandId)}`,
+          kind: 'command',
+          name: event.data.name,
+          ...(event.data.args === undefined || event.data.args.trim() === '' ? {} : { arguments: event.data.args.trim() }),
+          isError: false,
+        }
+        this.commands.set(String(event.data.commandId), row)
+        this.entries.push(row)
+        break
+      }
+      case 'command/done': {
+        const row = this.commands.get(String(event.data.commandId))
+        if (row === undefined) break
+        row.isError = event.data.kind === 'error'
+        if (event.data.text !== undefined) row.result = event.data.text
         break
       }
       default:
         break
     }
   }
-  return rows
+}
+
+/** Rebuild the transcript for a complete log prefix (initial replay and tests). */
+export function projectTranscript(events: readonly SessionEvent[]): TranscriptEntry[] {
+  const projector = new TranscriptProjector()
+  for (const event of events) projector.push(event)
+  return projector.entries
 }

@@ -2,6 +2,7 @@ import { CallId, createAssistantMessage, createToolResultMessage, createUserMess
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import { describe, expect, it } from 'vitest'
 import { projectTranscript } from '../src/transcript.ts'
+import type {} from '@deepseek-ai/dsh-commands/types'
 
 function event<T extends SessionEvent['type']>(
   type: T,
@@ -86,5 +87,19 @@ describe('projectTranscript', () => {
     expect(row.arguments.length).toBeLessThan(2_100)
     expect(row.result?.length).toBeLessThan(6_100)
     expect(row.result).toContain('session log keeps the complete value')
+  })
+
+  it('correlates durable Harness command lifecycles', () => {
+    const rows = projectTranscript([
+      event('command/run', 0, {
+        commandId: 'command-1' as never, name: 'plan', args: ' on', source: { kind: 'user' },
+      }),
+      event('command/done', 1, {
+        commandId: 'command-1' as never, kind: 'success', text: 'Plan mode enabled.',
+      }),
+    ])
+    expect(rows).toEqual([{
+      id: 'command-command-1', kind: 'command', name: 'plan', arguments: 'on', result: 'Plan mode enabled.', isError: false,
+    }])
   })
 })
