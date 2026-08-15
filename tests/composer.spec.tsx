@@ -3,11 +3,10 @@ import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
 import { ComposerEditor } from '../src/ui.tsx'
 
-function Editor({ onCursorMove }: { onCursorMove?: () => void } = {}): React.JSX.Element {
+function Editor(): React.JSX.Element {
   const [value, setValue] = useState('tail')
   return <ComposerEditor value={value} width={40} placeholder="" onChange={setValue} onSubmit={() => {}}
-    onHistory={() => {}} completionCount={0} onMoveCompletion={() => {}}
-    {...onCursorMove === undefined ? {} : { onCursorMove }} />
+    onHistory={() => {}} completionCount={0} onMoveCompletion={() => {}} />
 }
 
 const settle = async (): Promise<void> => { await new Promise(resolve => setTimeout(resolve, 0)) }
@@ -25,12 +24,5 @@ describe('composer control keys', () => {
     await settle(); view.stdin.write('\u0002'); await settle(); view.stdin.write('X'); await settle()
     expect(view.lastFrame()).toContain('taiXl')
     expect(view.lastFrame()).not.toContain('tailb')
-  })
-
-  it('requests an edge repair for repeated Ctrl+A presses', async () => {
-    let repairs = 0
-    const view = render(<Editor onCursorMove={() => { repairs += 1 }} />)
-    await settle(); view.stdin.write('\u0001'); await settle(); view.stdin.write('\u0001'); await settle()
-    expect(repairs).toBe(2)
   })
 })

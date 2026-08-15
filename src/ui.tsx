@@ -28,6 +28,21 @@ function useSnapshot(controller: TuiController): TuiSnapshot {
   return snapshot
 }
 
+function useTerminalColumns(): number {
+  const { stdout } = useStdout()
+  const [columns, setColumns] = useState(stdout.columns ?? 80)
+  useEffect(() => {
+    const update = (): void => { setColumns(stdout.columns ?? 80) }
+    stdout.on('resize', update)
+    update()
+    // Kitty can resize the OS window between Ink's construction and this
+    // effect subscribing, so sample as a fallback as well as listening.
+    const timer = setInterval(update, 100)
+    return () => { stdout.off('resize', update); clearInterval(timer) }
+  }, [stdout])
+  return columns
+}
+
 const spinnerFrames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
 
 /** Rotate a braille glyph while the model is working. */
@@ -197,7 +212,7 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion, onCursorMove }: {
+export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion, framed = false, prompt = '', promptColor = palette.signal, borderColor = palette.quiet }: {
   value: string
   width: number
   onChange: (value: string) => void
@@ -207,7 +222,10 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
   placeholder: string
   completionCount: number
   onMoveCompletion: (direction: -1 | 1) => void
-  onCursorMove?: () => void
+  framed?: boolean
+  prompt?: string
+  promptColor?: string
+  borderColor?: string
 }): React.JSX.Element {
   const [cursor, setCursor] = useState(value.length)
   const cursorRef = useRef(value.length)
@@ -222,11 +240,7 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
     cursorRef.current = position
     setCursor(position)
   }, [value])
-  const move = (position: number): void => {
-    cursorRef.current = position
-    setCursor(position)
-    onCursorMove?.()
-  }
+  const move = (position: number): void => { cursorRef.current = position; setCursor(position) }
   const replace = (next: string, nextCursor: number): void => {
     valueRef.current = next
     cursorRef.current = nextCursor
@@ -290,11 +304,15 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
       if (localX + cellWidth > width) { localX = 0; localY += 1 }
       localX += cellWidth
     }
-    const next = { x: x + localX, y: y + localY }
+    const next = { x: x + (framed ? 4 : 0) + localX, y: y + localY }
     setScreenCursor(current => current?.x === next.x && current.y === next.y ? current : next)
   })
-  return <Box ref={editorRef} width={width} minWidth={0} flexShrink={0}>
-    <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>
+  const content = value === '' ? ` ${placeholder}` : value
+  const padding = ' '.repeat(Math.max(0, width - stringWidth(content)))
+  return <Box ref={editorRef} width={framed ? width + 6 : width} minWidth={framed ? width + 6 : width} flexShrink={0}>
+    {framed
+      ? <Text><Text color={borderColor}>│ </Text><Text color={promptColor}>{prompt}</Text>{value === '' ? <Text dimColor>{content}</Text> : content}{padding}<Text color={borderColor}> │</Text></Text>
+      : <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>}
   </Box>
 }
 
@@ -312,7 +330,7 @@ function Composer({ controller, running, commands, attachments }: {
   const [confirmExit, setConfirmExit] = useState(false)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { exit } = useApp()
-  const { stdout } = useStdout()
+  const terminalColumns = useTerminalColumns()
 
   useEffect(() => () => {
     if (confirmTimer.current !== undefined) clearTimeout(confirmTimer.current)
@@ -397,35 +415,19 @@ function Composer({ controller, running, commands, attachments }: {
   const moveCompletion = (direction: -1 | 1): void => {
     setCompletionIndex(current => (current + direction + commandMatches.length) % Math.max(1, commandMatches.length))
   }
-  const frameWidth = Math.max(12, (stdout.columns ?? 80) - 1)
+  const frameWidth = Math.max(12, Math.min(96, terminalColumns - 1))
   const editorWidth = frameWidth - 6
-  let inputLines = 1
-  let inputColumn = 0
-  for (const character of value) {
-    if (character === '\n') { inputLines += 1; inputColumn = 0; continue }
-    const cellWidth = stringWidth(character)
-    if (inputColumn + cellWidth > editorWidth) { inputLines += 1; inputColumn = 0 }
-    inputColumn += cellWidth
-  }
   // Keep the frame visually distinct from the terminal's native cursor. Many
   // terminals use a thin cyan bar, which otherwise looks like a moved `│`.
   const borderColor = palette.quiet
   const promptColor = running ? palette.active : palette.signal
   const prompt = running ? '◌ ' : '› '
-  const repaintRightBorder = (): void => {
-    // Ink places the hardware cursor after committing the frame. Repaint the
-    // edge in the next event-loop turn, then restore the cursor so IME remains
-    // anchored at the logical insertion point. This also repairs no-op moves
-    // such as repeated Ctrl+A at column zero.
-    setImmediate(() => {
-      stdout.write(`\u001b7\u001b[${frameWidth}G\u001b[90m│\u001b[0m\u001b8`)
-    })
-  }
   const editor = <ComposerEditor
     value={value} width={editorWidth} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
     placeholder={running ? 'Add a follow-up…' : 'Ask DeepSeek…'}
     {...commandMatches[completionIndex] === undefined ? {} : { completion: commandMatches[completionIndex] }}
-    completionCount={commandMatches.length} onMoveCompletion={moveCompletion} onCursorMove={repaintRightBorder}
+    completionCount={commandMatches.length} onMoveCompletion={moveCompletion}
+    framed prompt={prompt} promptColor={promptColor} borderColor={borderColor}
   />
   return <Box flexDirection="column" marginTop={1}>
     {attachments.length === 0 ? null : <Box paddingX={1} gap={1}>
@@ -434,14 +436,9 @@ function Composer({ controller, running, commands, attachments }: {
         [{index + 1}] {attachment.name ?? `${attachment.width}×${attachment.height}`}
       </Text>)}
     </Box>}
-    <Box width={frameWidth} flexDirection="column">
+    <Box width={frameWidth} minWidth={frameWidth} flexShrink={0} flexDirection="column">
       <Text color={borderColor}>╭{'─'.repeat(frameWidth - 2)}╮</Text>
-      <Box width={frameWidth}>
-        <Text color={borderColor}>{Array.from({ length: inputLines }, () => '│ ').join('\n')}</Text>
-        <Text color={promptColor}>{Array.from({ length: inputLines }, (_, index) => index === 0 ? prompt : '  ').join('\n')}</Text>
-        {editor}
-        <Text color={borderColor}>{Array.from({ length: inputLines }, () => ' │').join('\n')}</Text>
-      </Box>
+      {editor}
       <Text color={borderColor}>╰{'─'.repeat(frameWidth - 2)}╯</Text>
     </Box>
     {value.startsWith('/') ? <Box flexDirection="column" paddingX={2}>
@@ -590,6 +587,33 @@ export interface TuiRenderHandle { waitUntilExit(): Promise<void>; unmount(): vo
 
 /** Start the terminal renderer. */
 export function renderTui(controller: TuiController): TuiRenderHandle {
-  const instance = render(<App controller={controller} />, { exitOnCtrlC: false })
-  return { waitUntilExit: async () => { await instance.waitUntilExit() }, unmount: () => { instance.unmount() } }
+  const app = <App controller={controller} />
+  const instance = render(app, { exitOnCtrlC: false })
+  let resizeRepaint: ReturnType<typeof setImmediate> | undefined
+  const startupReflow = setTimeout(() => {
+    const stdout = process.stdout as typeof process.stdout & { _refreshSize?: () => void }
+    stdout._refreshSize?.()
+    stdout.emit('resize')
+  }, 250)
+  const repaintAfterResize = (): void => {
+    if (resizeRepaint !== undefined) clearImmediate(resizeRepaint)
+    resizeRepaint = setImmediate(() => {
+      resizeRepaint = undefined
+      // Ink clears stale output when the terminal shrinks, but not when it
+      // grows. Clear once after its resize handler so the former right edge
+      // cannot survive as a selectable `│` inside the expanded composer.
+      instance.clear()
+      instance.rerender(app)
+    })
+  }
+  process.stdout.on('resize', repaintAfterResize)
+  return {
+    waitUntilExit: async () => { await instance.waitUntilExit() },
+    unmount: () => {
+      process.stdout.off('resize', repaintAfterResize)
+      clearTimeout(startupReflow)
+      if (resizeRepaint !== undefined) clearImmediate(resizeRepaint)
+      instance.unmount()
+    },
+  }
 }
