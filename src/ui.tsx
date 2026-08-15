@@ -197,7 +197,7 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
+export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion, onCursorMove }: {
   value: string
   width: number
   onChange: (value: string) => void
@@ -207,6 +207,7 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
   placeholder: string
   completionCount: number
   onMoveCompletion: (direction: -1 | 1) => void
+  onCursorMove?: () => void
 }): React.JSX.Element {
   const [cursor, setCursor] = useState(value.length)
   const cursorRef = useRef(value.length)
@@ -221,7 +222,11 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
     cursorRef.current = position
     setCursor(position)
   }, [value])
-  const move = (position: number): void => { cursorRef.current = position; setCursor(position) }
+  const move = (position: number): void => {
+    cursorRef.current = position
+    setCursor(position)
+    onCursorMove?.()
+  }
   const replace = (next: string, nextCursor: number): void => {
     valueRef.current = next
     cursorRef.current = nextCursor
@@ -407,11 +412,20 @@ function Composer({ controller, running, commands, attachments }: {
   const borderColor = palette.quiet
   const promptColor = running ? palette.active : palette.signal
   const prompt = running ? '◌ ' : '› '
+  const repaintRightBorder = (): void => {
+    // Ink places the hardware cursor after committing the frame. Repaint the
+    // edge in the next event-loop turn, then restore the cursor so IME remains
+    // anchored at the logical insertion point. This also repairs no-op moves
+    // such as repeated Ctrl+A at column zero.
+    setImmediate(() => {
+      stdout.write(`\u001b7\u001b[${frameWidth}G\u001b[90m│\u001b[0m\u001b8`)
+    })
+  }
   const editor = <ComposerEditor
     value={value} width={editorWidth} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
     placeholder={running ? 'Add a follow-up…' : 'Ask DeepSeek…'}
     {...commandMatches[completionIndex] === undefined ? {} : { completion: commandMatches[completionIndex] }}
-    completionCount={commandMatches.length} onMoveCompletion={moveCompletion}
+    completionCount={commandMatches.length} onMoveCompletion={moveCompletion} onCursorMove={repaintRightBorder}
   />
   return <Box flexDirection="column" marginTop={1}>
     {attachments.length === 0 ? null : <Box paddingX={1} gap={1}>
