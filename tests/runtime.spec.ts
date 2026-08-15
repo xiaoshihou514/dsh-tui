@@ -46,6 +46,7 @@ interface HarnessStub {
     resume: ReturnType<typeof vi.fn>
   }
   readonly disposeHandle: ReturnType<typeof vi.fn>
+  readonly archiveSession: ReturnType<typeof vi.fn>
   disposeEffect(): Promise<void>
 }
 
@@ -92,6 +93,7 @@ function harnessStub(options: {
     resume,
   }
   const archivedSessionIds: string[] = []
+  const archiveSession = vi.fn((id: string) => { archivedSessionIds.push(id); return Promise.resolve() })
   const services = {
     appExit: exit,
     loader: { await: () => Promise.resolve() },
@@ -133,7 +135,7 @@ function harnessStub(options: {
     userQuestions: { registerProvider: vi.fn(() => vi.fn()) },
     workspaceRegistry: {
       archivedSessionIds,
-      archiveSession: vi.fn((id: string) => { archivedSessionIds.push(id); return Promise.resolve() }),
+      archiveSession,
     },
     agents,
   }
@@ -154,6 +156,7 @@ function harnessStub(options: {
     wait,
     agents,
     disposeHandle,
+    archiveSession,
     async disposeEffect() { await effectDisposer?.() },
   }
 }
@@ -165,6 +168,39 @@ afterEach(() => {
 })
 
 describe('tui runtime', () => {
+  it('retires a newly created session on exit when no message was sent', async () => {
+    const stub = harnessStub()
+    apply(stub.ctx, {})
+
+    await vi.waitFor(() => { expect(stub.agents.create).toHaveBeenCalledOnce() })
+    stub.wait.resolve()
+    await vi.waitFor(() => { expect(stub.exit).toHaveBeenCalledWith(0) })
+    expect(stub.archiveSession).toHaveBeenCalledOnce()
+    expect(stub.archiveSession).toHaveBeenCalledWith('session-runtime')
+  })
+
+  it('keeps a newly created session after an ordinary message is sent', async () => {
+    const stub = harnessStub()
+    apply(stub.ctx, {})
+
+    await vi.waitFor(() => { expect(stub.agents.create).toHaveBeenCalledOnce() })
+    const controller = stub.rendered.mock.calls[0]?.[0] as TuiController
+    controller.submit('keep this session')
+    stub.wait.resolve()
+    await vi.waitFor(() => { expect(stub.exit).toHaveBeenCalledWith(0) })
+    expect(stub.archiveSession).not.toHaveBeenCalled()
+  })
+
+  it('never retires a resumed empty session', async () => {
+    const stub = harnessStub()
+    apply(stub.ctx, { sessionId: 'existing-session' })
+
+    await vi.waitFor(() => { expect(stub.agents.resume).toHaveBeenCalledOnce() })
+    stub.wait.resolve()
+    await vi.waitFor(() => { expect(stub.exit).toHaveBeenCalledWith(0) })
+    expect(stub.archiveSession).not.toHaveBeenCalled()
+  })
+
   it('creates one root agent, submits the initial prompt, and exits cleanly', async () => {
     const stub = harnessStub()
     apply(stub.ctx, { initialPrompt: 'hello' })

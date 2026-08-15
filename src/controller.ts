@@ -142,6 +142,7 @@ export class TuiController implements UserQuestionProvider {
   private panel: TuiSnapshot['panel']
   private notice: string | undefined
   private command: ((command: 'sessions' | 'new' | 'global' | 'model' | 'attach' | 'rename' | 'fork' | 'archive' | 'harness', argument?: string) => void) | undefined
+  private userMessageSent: (() => void) | undefined
   private draftAttachments: ImageAttachmentRef[] = []
   private commands: readonly CommandDescriptor[] = []
 
@@ -267,6 +268,7 @@ export class TuiController implements UserQuestionProvider {
       ],
       source: { kind: 'user' },
     }))
+    this.userMessageSent?.()
     this.draftAttachments = []
     this.emit()
   }
@@ -287,6 +289,12 @@ export class TuiController implements UserQuestionProvider {
   setCommandHandler(handler: (command: 'sessions' | 'new' | 'global' | 'model' | 'attach' | 'rename' | 'fork' | 'archive' | 'harness', argument?: string) => void): () => void {
     this.command = handler
     return () => { if (this.command === handler) this.command = undefined }
+  }
+
+  /** Observe accepted ordinary messages, excluding local and Harness commands. */
+  setUserMessageSentHandler(handler: () => void): () => void {
+    this.userMessageSent = handler
+    return () => { if (this.userMessageSent === handler) this.userMessageSent = undefined }
   }
 
   /** Replace command-completion metadata for the active agent scope. */

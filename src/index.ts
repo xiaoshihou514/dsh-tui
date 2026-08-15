@@ -87,6 +87,9 @@ class TuiRuntime {
   private modelSelection: ModelSelectionRef | undefined
   private renderer: TuiRenderHandle | undefined
   private cleanupTask: Promise<void> | undefined
+  private emptySessionCandidate: SessionId | undefined
+  private archiveSession: ((id: SessionId) => Promise<void>) | undefined
+  private candidateHasMessage = false
   private stopping = false
 
   constructor(
@@ -114,8 +117,12 @@ class TuiRuntime {
     const userQuestions = this.ctx.get('userQuestions')
     const workspaceRegistry = this.ctx.get('workspaceRegistry')
     if (agents === undefined || attachments === undefined || commands === undefined || defaultModel === undefined || llm === undefined || sessions === undefined || persistence === undefined || projectionCache === undefined || sessionTitle === undefined || userQuestions === undefined || workspaceRegistry === undefined) return
+    this.archiveSession = id => workspaceRegistry.archiveSession(id)
 
     this.disposers.push(userQuestions.registerProvider(this.controller))
+    this.disposers.push(this.controller.setUserMessageSentHandler(() => {
+      if (this.emptySessionCandidate === this.agent?.session.id) this.candidateHasMessage = true
+    }))
     const selection = defaultModel.currentSelection()
     const startingCwd = process.cwd()
     this.renderer = this.io.render(this.controller)
@@ -147,6 +154,7 @@ class TuiRuntime {
       nextHandle: AgentHandle | undefined,
       nextSelection: ModelSelectionRef,
       nextBorrowedDisposer?: () => void,
+      retireIfEmpty = false,
     ): Promise<void> => {
       if (this.stopping) {
         nextBorrowedDisposer?.()
@@ -154,11 +162,14 @@ class TuiRuntime {
         return
       }
       const previousHandle = this.handle
+      await this.retireEmptySession()
       this.borrowedApprovalDisposer?.()
       this.handle = nextHandle
       this.agent = nextAgent
       this.modelSelection = nextSelection
       this.borrowedApprovalDisposer = nextBorrowedDisposer
+      this.emptySessionCandidate = retireIfEmpty ? nextAgent.session.id : undefined
+      this.candidateHasMessage = false
       const title = sessionTitle.get(nextAgent.session)?.title
       this.controller.attach(nextAgent, {
         model: `${selection.provider}/${selection.model}`,
@@ -205,7 +216,7 @@ class TuiRuntime {
         })
         nextAgent = nextHandle.agent
       }
-      await adopt(nextAgent, nextHandle, nextSelection, nextBorrowedDisposer)
+      await adopt(nextAgent, nextHandle, nextSelection, nextBorrowedDisposer, choice.kind === 'new')
     }
 
     this.disposers.push(this.ctx.on('session/event', (session, _event) => {
@@ -409,11 +420,23 @@ class TuiRuntime {
     while (this.disposers.length > 0) this.disposers.pop()?.()
     this.borrowedApprovalDisposer?.()
     this.borrowedApprovalDisposer = undefined
+    await this.retireEmptySession()
     const handle = this.handle
     this.handle = undefined
     this.agent = undefined
     this.modelSelection = undefined
     if (handle !== undefined) await handle.dispose()
+  }
+
+  private async retireEmptySession(): Promise<void> {
+    const candidate = this.emptySessionCandidate
+    this.emptySessionCandidate = undefined
+    if (candidate === undefined || this.candidateHasMessage) return
+    try {
+      await this.archiveSession?.(candidate)
+    } catch (error: unknown) {
+      this.io.stderr.write(`dsh-tui: could not retire empty session ${candidate}: ${error instanceof Error ? error.message : String(error)}\n`)
+    }
   }
 }
 
