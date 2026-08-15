@@ -288,13 +288,8 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
     const next = { x: x + localX, y: y + localY }
     setScreenCursor(current => current?.x === next.x && current.y === next.y ? current : next)
   })
-  // Ink normally takes a cursor-only update path when navigation changes no
-  // visible text. Some terminals leave the bordered content row damaged after
-  // that escape sequence. A changing zero-cell-width token makes Ink repaint
-  // the frame while remaining invisible and layout-neutral.
-  const cursorPaintToken = `\u200b${cursor.toString(2).replaceAll('0', '\u200b').replaceAll('1', '\u2060')}`
   return <Box ref={editorRef} width={width} minWidth={0} flexShrink={0}>
-    <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}{cursorPaintToken}</Text>
+    <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>
   </Box>
 }
 

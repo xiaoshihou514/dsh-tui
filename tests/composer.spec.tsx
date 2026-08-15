@@ -16,6 +16,7 @@ describe('composer control keys', () => {
     const view = render(<Editor />)
     await settle(); view.stdin.write('\u0001'); await settle(); view.stdin.write('X'); await settle()
     expect(view.lastFrame()).toContain('Xtail')
+    expect(view.lastFrame()).not.toMatch(/[\u200b\u2060]/u)
   })
 
   it('moves left from the end with Ctrl+B instead of inserting b', async () => {
