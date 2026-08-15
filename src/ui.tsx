@@ -197,8 +197,9 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-function ComposerEditor({ value, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
+function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
   value: string
+  width: number
   onChange: (value: string) => void
   onSubmit: () => void
   onHistory: (direction: -1 | 1) => void
@@ -261,12 +262,11 @@ function ComposerEditor({ value, onChange, onSubmit, onHistory, completion, plac
       const cellWidth = stringWidth(character)
       if (localX + cellWidth > width) { localX = 0; localY += 1 }
       localX += cellWidth
-      if (localX === width) { localX = 0; localY += 1 }
     }
     const next = { x: x + localX, y: y + localY }
     setScreenCursor(current => current?.x === next.x && current.y === next.y ? current : next)
-  }, [cursor, value])
-  return <Box ref={editorRef} width="100%" minWidth={0} flexShrink={1}>
+  })
+  return <Box ref={editorRef} width={width} minWidth={0} flexShrink={0}>
     <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>
   </Box>
 }
@@ -285,6 +285,7 @@ function Composer({ controller, running, commands, attachments }: {
   const [confirmExit, setConfirmExit] = useState(false)
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { exit } = useApp()
+  const { stdout } = useStdout()
 
   useEffect(() => () => {
     if (confirmTimer.current !== undefined) clearTimeout(confirmTimer.current)
@@ -369,8 +370,20 @@ function Composer({ controller, running, commands, attachments }: {
   const moveCompletion = (direction: -1 | 1): void => {
     setCompletionIndex(current => (current + direction + commandMatches.length) % Math.max(1, commandMatches.length))
   }
+  const frameWidth = Math.max(12, (stdout.columns ?? 80) - 1)
+  const editorWidth = frameWidth - 6
+  let inputLines = 1
+  let inputColumn = 0
+  for (const character of value) {
+    if (character === '\n') { inputLines += 1; inputColumn = 0; continue }
+    const cellWidth = stringWidth(character)
+    if (inputColumn + cellWidth > editorWidth) { inputLines += 1; inputColumn = 0 }
+    inputColumn += cellWidth
+  }
+  const borderColor = running ? palette.active : palette.signal
+  const prompt = running ? '◌ ' : '› '
   const editor = <ComposerEditor
-    value={value} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
+    value={value} width={editorWidth} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
     placeholder={running ? 'Add a follow-up…' : 'Ask DeepSeek…'}
     {...commandMatches[completionIndex] === undefined ? {} : { completion: commandMatches[completionIndex] }}
     completionCount={commandMatches.length} onMoveCompletion={moveCompletion}
@@ -382,13 +395,14 @@ function Composer({ controller, running, commands, attachments }: {
         [{index + 1}] {attachment.name ?? `${attachment.width}×${attachment.height}`}
       </Text>)}
     </Box>}
-    <Box width="100%" flexDirection="column" borderStyle="round" borderColor={running ? palette.active : palette.signal} paddingX={1}>
-      <Box minWidth={0} flexShrink={1}>
-        <Text color={running ? palette.active : palette.signal}>{running ? '◌ ' : '› '}</Text>
-        <Box minWidth={0} flexGrow={1} flexShrink={1}>
-          {editor}
-        </Box>
+    <Box width={frameWidth} flexDirection="column">
+      <Text color={borderColor}>╭{'─'.repeat(frameWidth - 2)}╮</Text>
+      <Box width={frameWidth}>
+        <Text color={borderColor}>{Array.from({ length: inputLines }, (_, index) => index === 0 ? `│ ${prompt}` : '│   ').join('\n')}</Text>
+        {editor}
+        <Text color={borderColor}>{Array.from({ length: inputLines }, () => ' │').join('\n')}</Text>
       </Box>
+      <Text color={borderColor}>╰{'─'.repeat(frameWidth - 2)}╯</Text>
     </Box>
     {value.startsWith('/') ? <Box flexDirection="column" paddingX={2}>
       {commandMatches.length === 0 ? <Text color={palette.quiet}>No matching commands</Text> : commandMatches.map((command, index) => <Text key={command.name} {...index === completionIndex ? { inverse: true, bold: true } : { color: palette.quiet }}>
