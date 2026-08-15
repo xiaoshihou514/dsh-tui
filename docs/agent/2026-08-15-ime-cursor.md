@@ -29,3 +29,5 @@ Kitty's PTY reached 147 columns after Ink had initialized its Yoga root at 96, a
 The PTY and Kitty both reported 147 columns while Yoga constrained the flex content row to 96. To avoid mixing a 147-column literal horizontal border with a 96-column flex row, the composer now has a 96-column readability cap. Every side is generated from that single width; narrower terminals still use their available width.
 
 The border geometry was ultimately removed by design. The composer is now a three-row background surface: a blank padded row, one atomic prompt/input row, and another blank padded row. No box-drawing edge exists to become stale or be confused with the hardware cursor, and the surface can use the available terminal width safely.
+
+Once the border was removed, the resize-era `clear()`/`rerender()` workaround became both unnecessary and harmful. Its delayed startup resize could clear the session picker and rerender the identical React element as a no-op, leaving the screen blank until input changed state. `renderTui` is back to Ink's normal lifecycle; terminal width remains reactive through `useTerminalColumns` without imperatively clearing the live region.

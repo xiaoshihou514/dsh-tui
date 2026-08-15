@@ -584,33 +584,6 @@ export interface TuiRenderHandle { waitUntilExit(): Promise<void>; unmount(): vo
 
 /** Start the terminal renderer. */
 export function renderTui(controller: TuiController): TuiRenderHandle {
-  const app = <App controller={controller} />
-  const instance = render(app, { exitOnCtrlC: false })
-  let resizeRepaint: ReturnType<typeof setImmediate> | undefined
-  const startupReflow = setTimeout(() => {
-    const stdout = process.stdout as typeof process.stdout & { _refreshSize?: () => void }
-    stdout._refreshSize?.()
-    stdout.emit('resize')
-  }, 250)
-  const repaintAfterResize = (): void => {
-    if (resizeRepaint !== undefined) clearImmediate(resizeRepaint)
-    resizeRepaint = setImmediate(() => {
-      resizeRepaint = undefined
-      // Ink clears stale output when the terminal shrinks, but not when it
-      // grows. Clear once after its resize handler so the former right edge
-      // cannot survive as a selectable `│` inside the expanded composer.
-      instance.clear()
-      instance.rerender(app)
-    })
-  }
-  process.stdout.on('resize', repaintAfterResize)
-  return {
-    waitUntilExit: async () => { await instance.waitUntilExit() },
-    unmount: () => {
-      process.stdout.off('resize', repaintAfterResize)
-      clearTimeout(startupReflow)
-      if (resizeRepaint !== undefined) clearImmediate(resizeRepaint)
-      instance.unmount()
-    },
-  }
+  const instance = render(<App controller={controller} />, { exitOnCtrlC: false })
+  return { waitUntilExit: async () => { await instance.waitUntilExit() }, unmount: () => { instance.unmount() } }
 }
