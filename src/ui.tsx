@@ -348,12 +348,16 @@ function Composer({ controller, running, commands, attachments }: {
         [{index + 1}] {attachment.name ?? `${attachment.width}×${attachment.height}`}
       </Text>)}
     </Box>}
-    <Box borderStyle="round" borderColor={running ? palette.active : palette.signal} paddingX={1}>
-      <Text color={running ? palette.active : palette.signal}>{running ? '◌ ' : '› '}</Text>
-      {value === '' ? <>
-        {editor}
-        <Text dimColor>{running ? 'Add a follow-up…' : 'Ask DeepSeek…'}</Text>
-      </> : editor}
+    <Box width="100%" flexDirection="column" borderStyle="round" borderColor={running ? palette.active : palette.signal} paddingX={1}>
+      <Box minWidth={0} flexShrink={1}>
+        <Text color={running ? palette.active : palette.signal}>{running ? '◌ ' : '› '}</Text>
+        <Box minWidth={0} flexGrow={1} flexShrink={1}>
+          {value === '' ? <>
+            {editor}
+            <Text dimColor>{running ? 'Add a follow-up…' : 'Ask DeepSeek…'}</Text>
+          </> : editor}
+        </Box>
+      </Box>
     </Box>
     {value.startsWith('/') ? <Box flexDirection="column" paddingX={2}>
       {commandMatches.length === 0 ? <Text color={palette.quiet}>No matching commands</Text> : commandMatches.map((command, index) => <Text key={command.name} {...index === completionIndex ? { inverse: true, bold: true } : { color: palette.quiet }}>
