@@ -6,6 +6,7 @@ import TextInput from 'ink-text-input'
 import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import type { ModelChoice, SessionChoice, TuiController, TuiSnapshot } from './controller.ts'
 import type { TranscriptEntry } from './transcript.ts'
+import { Markdown } from './markdown.tsx'
 
 const palette = {
   // ANSI names deliberately defer their actual appearance to the user's
@@ -72,11 +73,11 @@ function TranscriptRow({ entry, live = false, spinner }: {
       const thinking = entry.streaming && entry.text === ''
       return <Box marginTop={1}>
         <Box width={3}><Text color={palette.signal}>{entry.streaming ? (thinking ? spinner ?? '◈' : '◈') : '◇'}</Text></Box>
-        <Box flexDirection="column" flexGrow={1}>
+        <Box minWidth={0} flexDirection="column" flexGrow={1} flexShrink={1}>
           {!thinking || entry.reasoning === undefined || entry.reasoning === '' ? null
             : <Text color={palette.faint} wrap="truncate-start">{oneLine(entry.reasoning)}</Text>}
           {entry.text === '' ? null
-            : <Text>{live ? tailLines(entry.text, 20) : entry.text}{entry.streaming ? <Text color={palette.signal}> ▋</Text> : null}</Text>}
+            : <>{<Markdown>{live ? tailLines(entry.text, 20) : entry.text}</Markdown>}{entry.streaming ? <Text color={palette.signal}> ▋</Text> : null}</>}
         </Box>
       </Box>
     }

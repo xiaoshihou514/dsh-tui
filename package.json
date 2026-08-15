@@ -2,7 +2,12 @@
   "name": "dsh-tui",
   "version": "0.1.0",
   "description": "An interactive terminal surface for DeepSeek Harness",
-  "keywords": ["deepseek", "terminal", "tui", "agent"],
+  "keywords": [
+    "deepseek",
+    "terminal",
+    "tui",
+    "agent"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xiaoshihou514/dsh-tui.git"
@@ -57,6 +62,7 @@
     "commander": "^15.0.0",
     "ink": "^6.3.1",
     "ink-text-input": "^6.0.0",
+    "marked": "^18.0.9",
     "react": "^19.1.1"
   },
   "peerDependencies": {
@@ -102,6 +108,7 @@
     "@deepseek-ai/dsh-workspace": "^0.1.0-rc.5",
     "@types/node": "^22.20.0",
     "@types/react": "^19.1.10",
+    "ink-testing-library": "^4.0.0",
     "publint": "^0.3.21",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
