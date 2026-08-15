@@ -402,7 +402,10 @@ function Composer({ controller, running, commands, attachments }: {
     if (inputColumn + cellWidth > editorWidth) { inputLines += 1; inputColumn = 0 }
     inputColumn += cellWidth
   }
-  const borderColor = running ? palette.active : palette.signal
+  // Keep the frame visually distinct from the terminal's native cursor. Many
+  // terminals use a thin cyan bar, which otherwise looks like a moved `│`.
+  const borderColor = palette.quiet
+  const promptColor = running ? palette.active : palette.signal
   const prompt = running ? '◌ ' : '› '
   const editor = <ComposerEditor
     value={value} width={editorWidth} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
@@ -420,7 +423,8 @@ function Composer({ controller, running, commands, attachments }: {
     <Box width={frameWidth} flexDirection="column">
       <Text color={borderColor}>╭{'─'.repeat(frameWidth - 2)}╮</Text>
       <Box width={frameWidth}>
-        <Text color={borderColor}>{Array.from({ length: inputLines }, (_, index) => index === 0 ? `│ ${prompt}` : '│   ').join('\n')}</Text>
+        <Text color={borderColor}>{Array.from({ length: inputLines }, () => '│ ').join('\n')}</Text>
+        <Text color={promptColor}>{Array.from({ length: inputLines }, (_, index) => index === 0 ? prompt : '  ').join('\n')}</Text>
         {editor}
         <Text color={borderColor}>{Array.from({ length: inputLines }, () => ' │').join('\n')}</Text>
       </Box>
