@@ -9,6 +9,7 @@ export type TranscriptEntry =
   | { id: string; kind: 'user'; text: string }
   | { id: string; kind: 'assistant'; text: string; reasoning?: string; streaming: boolean }
   | { id: string; kind: 'tool'; name: string; arguments: string; result?: string; isError: boolean }
+  | { id: string; kind: 'tool-summary'; count: number; names: string }
   | { id: string; kind: 'command'; name: string; arguments?: string; result?: string; isError: boolean }
   | { id: string; kind: 'notice'; text: string; tone: 'muted' | 'error' }
 
@@ -83,6 +84,30 @@ export class TranscriptProjector {
   private readonly tools = new Map<string, Extract<TranscriptEntry, { kind: 'tool' }>>()
   private readonly commands = new Map<string, Extract<TranscriptEntry, { kind: 'command' }>>()
 
+  /** Replace a completed run of successful tools with one durable status row. */
+  private foldCompletedTools(): void {
+    let start = this.entries.length
+    while (start > 0) {
+      const entry = this.entries[start - 1]
+      if (entry?.kind !== 'tool' || entry.result === undefined || entry.isError) break
+      start -= 1
+    }
+    const rows = this.entries.slice(start) as Array<Extract<TranscriptEntry, { kind: 'tool' }>>
+    if (rows.length === 0) return
+    const counts = new Map<string, number>()
+    for (const row of rows) {
+      counts.set(row.name, (counts.get(row.name) ?? 0) + 1)
+      this.tools.delete(row.id.slice('tool-'.length))
+    }
+    const names = [...counts].map(([name, count]) => count === 1 ? name : `${name} ×${count}`).join(', ')
+    this.entries.splice(start, rows.length, {
+      id: `tool-summary-${rows[0]?.id ?? start}`,
+      kind: 'tool-summary',
+      count: rows.length,
+      names,
+    })
+  }
+
   /** Fold one more durable event into the transcript. */
   push(event: SessionEvent): void {
     switch (event.type) {
@@ -103,7 +128,15 @@ export class TranscriptProjector {
           this.streaming.set(key, row)
           this.entries.push(row)
         }
-        if (chunk.type === 'text-delta') row.text += chunk.text
+        if (chunk.type === 'text-delta') {
+          if (row.text === '') {
+            const index = this.entries.indexOf(row)
+            if (index !== -1) this.entries.splice(index, 1)
+            this.foldCompletedTools()
+            this.entries.push(row)
+          }
+          row.text += chunk.text
+        }
         else row.reasoning = (row.reasoning ?? '') + chunk.text
         break
       }
@@ -119,7 +152,8 @@ export class TranscriptProjector {
         if (!isAppendSurfaceEvent(event)) break
         const text = blocksText(event.data.message.content)
         const reasoning = reasoningText(event.data.message.content)
-        if (text !== '' || reasoning !== '') {
+        if (text !== '') {
+          this.foldCompletedTools()
           this.entries.push({
             id: `event-${event.seq}`,
             kind: 'assistant',
@@ -164,6 +198,7 @@ export class TranscriptProjector {
         break
       }
       case 'turn/end': {
+        this.foldCompletedTools()
         const notice = turnNotice(event)
         if (notice !== undefined) this.entries.push(notice)
         break

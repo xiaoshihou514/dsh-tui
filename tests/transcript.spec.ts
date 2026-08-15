@@ -48,6 +48,38 @@ describe('projectTranscript', () => {
     }])
   })
 
+  it('folds completed tools when the next answer starts', () => {
+    const bashId = CallId('bash-1')
+    const grepId = CallId('grep-1')
+    const result = (callId: CallId) => createToolResultMessage({
+      callId,
+      content: [{ type: 'text' as const, text: 'done' }],
+      isError: false,
+    })
+    const rows = projectTranscript([
+      event('tool/call', 0, { turn: 1, step: 1, callId: bashId, name: 'bash', arguments: '{}' }),
+      event('tool/result', 1, { turn: 1, step: 1, message: result(bashId) }, true),
+      event('tool/call', 2, { turn: 1, step: 2, callId: grepId, name: 'grep', arguments: '{}' }),
+      event('tool/result', 3, { turn: 1, step: 2, message: result(grepId) }, true),
+      event('assistant/chunk', 4, { turn: 1, step: 3, chunk: { type: 'text-delta', index: 0, text: 'Found it.' } }),
+    ])
+    expect(rows).toEqual([
+      { id: 'tool-summary-tool-bash-1', kind: 'tool-summary', count: 2, names: 'bash, grep' },
+      { id: 'stream-1/3', kind: 'assistant', text: 'Found it.', streaming: true },
+    ])
+  })
+
+  it('does not retain a blank assistant row for reasoning-only steps', () => {
+    const message = createAssistantMessage({
+      content: [{ type: 'reasoning', text: 'internal work' }],
+      source: { provider: 'test', model: 'test' },
+    })
+    expect(projectTranscript([
+      event('assistant/chunk', 0, { turn: 1, step: 1, chunk: { type: 'reasoning-delta', index: 0, text: 'internal' } }),
+      event('assistant/message', 1, { turn: 1, step: 1, message }, true),
+    ])).toEqual([])
+  })
+
   it('shows only direct user prompts and append-origin messages', () => {
     const direct = createUserMessage({ content: [{ type: 'text', text: 'hello' }], source: { kind: 'user' } })
     const injected = createUserMessage({

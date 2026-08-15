@@ -26,6 +26,9 @@ importers:
       react:
         specifier: ^19.1.1
         version: 19.2.8
+      string-width:
+        specifier: ^8.2.2
+        version: 8.2.2
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.0

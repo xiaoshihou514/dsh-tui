@@ -11,7 +11,10 @@ describe('Markdown', () => {
     expect(frame).toContain('Result')
     expect(frame).toContain('• ready')
     expect(frame).toContain('old and code')
-    expect(frame).toContain('│ A │ B │')
+    const tableLines = frame.split('\n').filter(line => line.startsWith('│') || line.startsWith('├'))
+    expect(tableLines).toHaveLength(3)
+    expect(new Set(tableLines.map(line => line.length)).size).toBe(1)
+    expect(frame).toContain('│ A')
     expect(frame).not.toContain('**')
     expect(frame).not.toContain('~~')
   })
@@ -19,5 +22,11 @@ describe('Markdown', () => {
   it('renders incomplete streaming markdown without throwing', () => {
     const view = render(<Markdown>{'Working on **the current'}</Markdown>)
     expect(view.lastFrame()).toContain('Working on **the current')
+  })
+
+  it('wraps code blocks inside the available terminal width', () => {
+    const view = render(<Markdown>{`\`\`\`text\n${'word '.repeat(40)}\n\`\`\``}</Markdown>)
+    const frame = view.lastFrame() ?? ''
+    expect(Math.max(...frame.split('\n').map(line => line.length))).toBeLessThanOrEqual(view.stdout.columns)
   })
 })

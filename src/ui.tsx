@@ -91,6 +91,11 @@ function TranscriptRow({ entry, live = false, spinner }: {
           {!entry.isError || entry.result === undefined ? null : <Text color={palette.danger}>{clipLines(entry.result, 3)}</Text>}
         </Box>
       </Box>
+    case 'tool-summary':
+      return <Box marginTop={1}>
+        <Box width={3}><Text color={palette.quiet}>└</Text></Box>
+        <Text color={palette.quiet}>{entry.count} tool {entry.count === 1 ? 'call' : 'calls'} folded · {entry.names}</Text>
+      </Box>
     case 'command':
       return <Box marginTop={1}>
         <Box width={3}><Text color={entry.isError ? palette.danger : palette.signal}>›</Text></Box>
@@ -474,10 +479,10 @@ function ActivityStrip({ snapshot }: { snapshot: TuiSnapshot }): React.JSX.Eleme
 function App({ controller }: { controller: TuiController }): React.JSX.Element {
   const snapshot = useSnapshot(controller)
   const spinner = useSpinner(snapshot.status === 'running')
-  // Finalized entries are written once to the terminal so its native scrollback
-  // owns history; only the in-flight assistant message stays in the live region.
-  const staticEntries = snapshot.entries.filter(entry => !(entry.kind === 'assistant' && entry.streaming))
-  const liveEntries = snapshot.entries.filter(entry => entry.kind === 'assistant' && entry.streaming)
+  // Finalized entries are written once to native scrollback. Successful tools
+  // stay live until the projector can fold them; failures remain visible.
+  const staticEntries = snapshot.entries.filter(entry => (entry.kind !== 'tool' || entry.isError) && !(entry.kind === 'assistant' && entry.streaming))
+  const liveEntries = snapshot.entries.filter(entry => (entry.kind === 'assistant' && entry.streaming) || (entry.kind === 'tool' && !entry.isError))
   const interaction = snapshot.sessionChoices !== undefined
     ? <SessionPicker controller={controller} choices={snapshot.sessionChoices} />
     : snapshot.modelChoices !== undefined ? <ModelPicker controller={controller} choices={snapshot.modelChoices} />
