@@ -1,12 +1,13 @@
 /** Ink renderer for the interactive terminal surface. */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, render, Static, Text, useApp, useInput } from 'ink'
+import { Box, render, Static, Text, useApp, useInput, useStdout } from 'ink'
 import TextInput from 'ink-text-input'
 import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import type { ModelChoice, SessionChoice, TuiController, TuiSnapshot } from './controller.ts'
 import type { TranscriptEntry } from './transcript.ts'
 import { Markdown } from './markdown.tsx'
+import { tailColumns } from './text-layout.ts'
 
 const palette = {
   // ANSI names deliberately defer their actual appearance to the user's
@@ -50,16 +51,12 @@ function tailLines(value: string, lines = 20): string {
   return rows.length <= lines ? value : `… ${rows.length - lines} earlier lines\n${rows.slice(-lines).join('\n')}`
 }
 
-/** Collapse reasoning whitespace so the renderer can hold it on one line. */
-function oneLine(value: string): string {
-  return value.replace(/\s+/gu, ' ').trim()
-}
-
 function TranscriptRow({ entry, live = false, spinner }: {
   entry: TranscriptEntry
   live?: boolean
   spinner?: string
 }): React.JSX.Element {
+  const { stdout } = useStdout()
   switch (entry.kind) {
     case 'user':
       return <Box marginTop={1}>
@@ -71,11 +68,11 @@ function TranscriptRow({ entry, live = false, spinner }: {
       </Box>
     case 'assistant': {
       const thinking = entry.streaming && entry.text === ''
-      return <Box marginTop={1}>
-        <Box width={3}><Text color={palette.signal}>{entry.streaming ? (thinking ? spinner ?? '◈' : '◈') : '◇'}</Text></Box>
+      return <Box width="100%" minWidth={0} flexShrink={1} marginTop={1}>
+        <Box width={3} flexShrink={0}><Text color={palette.signal}>{entry.streaming ? (thinking ? spinner ?? '◈' : '◈') : '◇'}</Text></Box>
         <Box minWidth={0} flexDirection="column" flexGrow={1} flexShrink={1}>
           {!thinking || entry.reasoning === undefined || entry.reasoning === '' ? null
-            : <Text color={palette.faint} wrap="truncate-start">{oneLine(entry.reasoning)}</Text>}
+            : <Text color={palette.faint}>{tailColumns(entry.reasoning, Math.max(1, (stdout.columns ?? 80) - 4))}</Text>}
           {entry.text === '' ? null
             : <>{<Markdown>{live ? tailLines(entry.text, 20) : entry.text}</Markdown>}{entry.streaming ? <Text color={palette.signal}> ▋</Text> : null}</>}
         </Box>
