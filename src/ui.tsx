@@ -20,6 +20,7 @@ const palette = {
   active: 'yellow',
   success: 'green',
   danger: 'red',
+  composerSurface: '#292d30',
 } as const
 
 function useSnapshot(controller: TuiController): TuiSnapshot {
@@ -212,7 +213,7 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion, framed = false, prompt = '', promptColor = palette.signal, borderColor = palette.quiet }: {
+export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion, surfaced = false, prompt = '', promptColor = palette.signal }: {
   value: string
   width: number
   onChange: (value: string) => void
@@ -222,10 +223,9 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
   placeholder: string
   completionCount: number
   onMoveCompletion: (direction: -1 | 1) => void
-  framed?: boolean
+  surfaced?: boolean
   prompt?: string
   promptColor?: string
-  borderColor?: string
 }): React.JSX.Element {
   const [cursor, setCursor] = useState(value.length)
   const cursorRef = useRef(value.length)
@@ -304,14 +304,14 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
       if (localX + cellWidth > width) { localX = 0; localY += 1 }
       localX += cellWidth
     }
-    const next = { x: x + (framed ? 4 : 0) + localX, y: y + localY }
+    const next = { x: x + (surfaced ? 4 : 0) + localX, y: y + localY }
     setScreenCursor(current => current?.x === next.x && current.y === next.y ? current : next)
   })
   const content = value === '' ? ` ${placeholder}` : value
   const padding = ' '.repeat(Math.max(0, width - stringWidth(content)))
-  return <Box ref={editorRef} width={framed ? width + 6 : width} minWidth={framed ? width + 6 : width} flexShrink={0}>
-    {framed
-      ? <Text><Text color={borderColor}>│ </Text><Text color={promptColor}>{prompt}</Text>{value === '' ? <Text dimColor>{content}</Text> : content}{padding}<Text color={borderColor}> │</Text></Text>
+  return <Box ref={editorRef} width={surfaced ? width + 6 : width} minWidth={surfaced ? width + 6 : width} flexShrink={0}>
+    {surfaced
+      ? <Text backgroundColor={palette.composerSurface}>  <Text color={promptColor}>{prompt}</Text>{value === '' ? <Text dimColor>{content}</Text> : content}{padding}  </Text>
       : <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>}
   </Box>
 }
@@ -415,11 +415,8 @@ function Composer({ controller, running, commands, attachments }: {
   const moveCompletion = (direction: -1 | 1): void => {
     setCompletionIndex(current => (current + direction + commandMatches.length) % Math.max(1, commandMatches.length))
   }
-  const frameWidth = Math.max(12, Math.min(96, terminalColumns - 1))
+  const frameWidth = Math.max(12, terminalColumns - 1)
   const editorWidth = frameWidth - 6
-  // Keep the frame visually distinct from the terminal's native cursor. Many
-  // terminals use a thin cyan bar, which otherwise looks like a moved `│`.
-  const borderColor = palette.quiet
   const promptColor = running ? palette.active : palette.signal
   const prompt = running ? '◌ ' : '› '
   const editor = <ComposerEditor
@@ -427,7 +424,7 @@ function Composer({ controller, running, commands, attachments }: {
     placeholder={running ? 'Add a follow-up…' : 'Ask DeepSeek…'}
     {...commandMatches[completionIndex] === undefined ? {} : { completion: commandMatches[completionIndex] }}
     completionCount={commandMatches.length} onMoveCompletion={moveCompletion}
-    framed prompt={prompt} promptColor={promptColor} borderColor={borderColor}
+    surfaced prompt={prompt} promptColor={promptColor}
   />
   return <Box flexDirection="column" marginTop={1}>
     {attachments.length === 0 ? null : <Box paddingX={1} gap={1}>
@@ -437,9 +434,9 @@ function Composer({ controller, running, commands, attachments }: {
       </Text>)}
     </Box>}
     <Box width={frameWidth} minWidth={frameWidth} flexShrink={0} flexDirection="column">
-      <Text color={borderColor}>╭{'─'.repeat(frameWidth - 2)}╮</Text>
+      <Text backgroundColor={palette.composerSurface}>{' '.repeat(frameWidth)}</Text>
       {editor}
-      <Text color={borderColor}>╰{'─'.repeat(frameWidth - 2)}╯</Text>
+      <Text backgroundColor={palette.composerSurface}>{' '.repeat(frameWidth)}</Text>
     </Box>
     {value.startsWith('/') ? <Box flexDirection="column" paddingX={2}>
       {commandMatches.length === 0 ? <Text color={palette.quiet}>No matching commands</Text> : commandMatches.map((command, index) => <Text key={command.name} {...index === completionIndex ? { inverse: true, bold: true } : { color: palette.quiet }}>

@@ -27,3 +27,5 @@ Pixel and selectable-text verification showed that `flexShrink={0}` alone did no
 Kitty's PTY reached 147 columns after Ink had initialized its Yoga root at 96, and the initial resize notification could occur before the application subscribed. `renderTui` now emits one startup reflow after 250 ms, once the OS window has settled, so Ink recalculates its root width before interactive input begins.
 
 The PTY and Kitty both reported 147 columns while Yoga constrained the flex content row to 96. To avoid mixing a 147-column literal horizontal border with a 96-column flex row, the composer now has a 96-column readability cap. Every side is generated from that single width; narrower terminals still use their available width.
+
+The border geometry was ultimately removed by design. The composer is now a three-row background surface: a blank padded row, one atomic prompt/input row, and another blank padded row. No box-drawing edge exists to become stale or be confused with the hardware cursor, and the surface can use the available terminal width safely.
