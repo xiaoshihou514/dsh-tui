@@ -1,6 +1,7 @@
 import React from 'react'
 import { render } from 'ink-testing-library'
 import { describe, expect, it } from 'vitest'
+import stringWidth from 'string-width'
 import { Markdown } from '../src/markdown.tsx'
 
 describe('Markdown', () => {
@@ -25,8 +26,8 @@ describe('Markdown', () => {
   })
 
   it('wraps code blocks inside the available terminal width', () => {
-    const view = render(<Markdown>{`\`\`\`text\n${'word '.repeat(40)}\n\`\`\``}</Markdown>)
+    const view = render(<Markdown>{`\`\`\`bash\n${'gcc -std=c23 -O2 -pthread -Wall -Wextra qfind.c -o qfind # 零警告 '.repeat(4)}\n\`\`\``}</Markdown>)
     const frame = view.lastFrame() ?? ''
-    expect(Math.max(...frame.split('\n').map(line => line.length))).toBeLessThanOrEqual(view.stdout.columns)
+    expect(Math.max(...frame.split('\n').map(line => stringWidth(line)))).toBeLessThanOrEqual(view.stdout.columns - 3)
   })
 })

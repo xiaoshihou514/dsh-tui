@@ -68,7 +68,7 @@ function blocks(tokens: readonly Token[], keyPrefix: string, maxWidth: number): 
       case 'heading': return <Box key={key} marginTop={index === 0 ? 0 : 1}><Text color={colors.accent} bold>{inline((token as Tokens.Heading).tokens, key)}</Text></Box>
       case 'paragraph': return <Box key={key}><Text>{inline((token as Tokens.Paragraph).tokens, key)}</Text></Box>
       case 'text': return <Box key={key}><Text>{token.tokens === undefined ? token.text : inline(token.tokens, key)}</Text></Box>
-      case 'code': return <Box key={key} width="100%" minWidth={0} flexShrink={1} overflow="hidden" flexDirection="column" marginY={1} paddingX={1} borderStyle="single" borderColor={colors.quote}>
+      case 'code': return <Box key={key} width={maxWidth} minWidth={0} flexShrink={1} overflow="hidden" flexDirection="column" marginY={1} paddingX={1} borderStyle="single" borderColor={colors.quote}>
         {token.lang === undefined || token.lang === '' ? null : <Text color={colors.quote}>{token.lang}</Text>}
         <Text color={colors.code} wrap="wrap">{token.text}</Text>
       </Box>
@@ -102,5 +102,6 @@ function blocks(tokens: readonly Token[], keyPrefix: string, maxWidth: number): 
 export function Markdown({ children }: { children: string }): React.JSX.Element {
   const { stdout } = useStdout()
   const tokens = marked.lexer(children, { gfm: true })
-  return <Box width="100%" minWidth={0} flexShrink={1} flexDirection="column">{blocks(tokens, 'md', Math.max(20, (stdout.columns ?? 80) - 3))}</Box>
+  const maxWidth = Math.max(1, (stdout.columns ?? 80) - 3)
+  return <Box width={maxWidth} minWidth={0} flexShrink={1} overflow="hidden" flexDirection="column">{blocks(tokens, 'md', maxWidth)}</Box>
 }

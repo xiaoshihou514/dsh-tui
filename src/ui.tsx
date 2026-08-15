@@ -316,11 +316,12 @@ export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, co
   </Box>
 }
 
-function Composer({ controller, running, commands, attachments }: {
+function Composer({ controller, running, commands, attachments, beforeExit }: {
   controller: TuiController
   running: boolean
   commands: TuiSnapshot['commands']
   attachments: TuiSnapshot['draftAttachments']
+  beforeExit: () => void
 }): React.JSX.Element {
   const [value, setValue] = useState('')
   const [history, setHistory] = useState<string[]>([])
@@ -350,6 +351,7 @@ function Composer({ controller, running, commands, attachments }: {
     setValue('')
     if (confirmExit) {
       if (confirmTimer.current !== undefined) clearTimeout(confirmTimer.current)
+      beforeExit()
       exit()
       return
     }
@@ -447,7 +449,7 @@ function Composer({ controller, running, commands, attachments }: {
   </Box>
 }
 
-function SessionPicker({ controller, choices }: { controller: TuiController; choices: readonly SessionChoice[] }): React.JSX.Element {
+function SessionPicker({ controller, choices, beforeExit }: { controller: TuiController; choices: readonly SessionChoice[]; beforeExit: () => void }): React.JSX.Element {
   const [index, setIndex] = useState(0)
   const [query, setQuery] = useState('')
   const { exit } = useApp()
@@ -460,7 +462,7 @@ function SessionPicker({ controller, choices }: { controller: TuiController; cho
     if (key.upArrow) setIndex(current => (current + filtered.length - 1) % Math.max(1, filtered.length))
     if (key.downArrow) setIndex(current => (current + 1) % Math.max(1, filtered.length))
     if (key.return && filtered[index] !== undefined) controller.selectSession(filtered[index])
-    if (key.escape || (input === 'c' && key.ctrl)) { controller.selectSession(undefined); exit() }
+    if (key.escape || (input === 'c' && key.ctrl)) { controller.selectSession(undefined); beforeExit(); exit() }
   })
   return <Panel title="Open a conversation">
     <Box><Text color={palette.signal}>search › </Text><TextInput value={query} onChange={setQuery} placeholder="session or workspace" /></Box>
@@ -549,7 +551,7 @@ function ActivityStrip({ snapshot }: { snapshot: TuiSnapshot }): React.JSX.Eleme
   </Box>
 }
 
-function App({ controller }: { controller: TuiController }): React.JSX.Element {
+function App({ controller, beforeExit }: { controller: TuiController; beforeExit: () => void }): React.JSX.Element {
   const snapshot = useSnapshot(controller)
   const spinner = useSpinner(snapshot.status === 'running')
   // Finalized entries are written once to native scrollback. Successful tools
@@ -557,13 +559,13 @@ function App({ controller }: { controller: TuiController }): React.JSX.Element {
   const staticEntries = snapshot.entries.filter(entry => (entry.kind !== 'tool' || entry.isError) && !(entry.kind === 'assistant' && entry.streaming))
   const liveEntries = snapshot.entries.filter(entry => (entry.kind === 'assistant' && entry.streaming) || (entry.kind === 'tool' && !entry.isError))
   const interaction = snapshot.sessionChoices !== undefined
-    ? <SessionPicker controller={controller} choices={snapshot.sessionChoices} />
+    ? <SessionPicker controller={controller} choices={snapshot.sessionChoices} beforeExit={beforeExit} />
     : snapshot.modelChoices !== undefined ? <ModelPicker controller={controller} choices={snapshot.modelChoices} />
       : snapshot.panel === 'help' ? <Help controller={controller} />
         : snapshot.approval !== undefined ? <Approval controller={controller} {...snapshot.approval} />
           : snapshot.question !== undefined
             ? <Question key={snapshot.question.questions.map(question => question.id).join('/')} controller={controller} questions={snapshot.question.questions} />
-            : <Composer controller={controller} running={snapshot.status === 'running'} commands={snapshot.commands} attachments={snapshot.draftAttachments} />
+            : <Composer controller={controller} running={snapshot.status === 'running'} commands={snapshot.commands} attachments={snapshot.draftAttachments} beforeExit={beforeExit} />
   return <Box flexDirection="column">
     <Static items={staticEntries}>
       {(entry) => <TranscriptRow key={entry.id} entry={entry} />}
@@ -584,6 +586,11 @@ export interface TuiRenderHandle { waitUntilExit(): Promise<void>; unmount(): vo
 
 /** Start the terminal renderer. */
 export function renderTui(controller: TuiController): TuiRenderHandle {
-  const instance = render(<App controller={controller} />, { exitOnCtrlC: false })
-  return { waitUntilExit: async () => { await instance.waitUntilExit() }, unmount: () => { instance.unmount() } }
+  let instance: ReturnType<typeof render> | undefined
+  const clear = (): void => { instance?.clear() }
+  instance = render(<App controller={controller} beforeExit={clear} />, { exitOnCtrlC: false })
+  return {
+    waitUntilExit: async () => { await instance?.waitUntilExit() },
+    unmount: () => { instance?.clear(); instance?.unmount() },
+  }
 }
