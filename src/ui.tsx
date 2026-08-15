@@ -1,8 +1,9 @@
 /** Ink renderer for the interactive terminal surface. */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, render, Static, Text, useApp, useInput, useStdout } from 'ink'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Box, render, Static, Text, useApp, useCursor, useInput, useStdout, type CursorPosition, type DOMElement } from 'ink'
 import TextInput from 'ink-text-input'
+import stringWidth from 'string-width'
 import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-ai/dsh-user-questions'
 import type { ModelChoice, SessionChoice, TuiController, TuiSnapshot } from './controller.ts'
 import type { TranscriptEntry } from './transcript.ts'
@@ -196,16 +197,21 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-function ComposerEditor({ value, onChange, onSubmit, onHistory, completion, completionCount, onMoveCompletion }: {
+function ComposerEditor({ value, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
   value: string
   onChange: (value: string) => void
   onSubmit: () => void
   onHistory: (direction: -1 | 1) => void
   completion?: CompletionChoice
+  placeholder: string
   completionCount: number
   onMoveCompletion: (direction: -1 | 1) => void
 }): React.JSX.Element {
   const [cursor, setCursor] = useState(value.length)
+  const [screenCursor, setScreenCursor] = useState<CursorPosition>()
+  const editorRef = useRef<DOMElement>(null)
+  const { setCursorPosition } = useCursor()
+  setCursorPosition(screenCursor)
   useEffect(() => { setCursor(current => Math.min(current, value.length)) }, [value.length])
   const replace = (next: string, nextCursor: number): void => { onChange(next); setCursor(nextCursor) }
   useInput((input, key) => {
@@ -235,10 +241,34 @@ function ComposerEditor({ value, onChange, onSubmit, onHistory, completion, comp
     }
     if (input !== '') replace(`${value.slice(0, cursor)}${input}${value.slice(cursor)}`, cursor + input.length)
   })
-  const before = value.slice(0, cursor)
-  const at = value.slice(cursor, cursor + 1)
-  const after = value.slice(cursor + (at === '' ? 0 : 1))
-  return <Text>{before}<Text inverse>{at === '' ? ' ' : at}</Text>{after}</Text>
+  useLayoutEffect(() => {
+    const element = editorRef.current
+    const yoga = element?.yogaNode
+    if (element === null || yoga === undefined) return
+    let x = 0
+    let y = 0
+    let ancestor: DOMElement | undefined = element
+    while (ancestor !== undefined) {
+      x += ancestor.yogaNode?.getComputedLeft() ?? 0
+      y += ancestor.yogaNode?.getComputedTop() ?? 0
+      ancestor = ancestor.parentNode
+    }
+    const width = Math.max(1, yoga.getComputedWidth())
+    let localX = 0
+    let localY = 0
+    for (const character of value.slice(0, cursor)) {
+      if (character === '\n') { localX = 0; localY += 1; continue }
+      const cellWidth = stringWidth(character)
+      if (localX + cellWidth > width) { localX = 0; localY += 1 }
+      localX += cellWidth
+      if (localX === width) { localX = 0; localY += 1 }
+    }
+    const next = { x: x + localX, y: y + localY }
+    setScreenCursor(current => current?.x === next.x && current.y === next.y ? current : next)
+  }, [cursor, value])
+  return <Box ref={editorRef} width="100%" minWidth={0} flexShrink={1}>
+    <Text>{value === '' ? ' ' : value}{value === '' ? <Text dimColor>{placeholder}</Text> : null}</Text>
+  </Box>
 }
 
 function Composer({ controller, running, commands, attachments }: {
@@ -341,6 +371,7 @@ function Composer({ controller, running, commands, attachments }: {
   }
   const editor = <ComposerEditor
     value={value} onChange={setValue} onSubmit={submit} onHistory={browseHistory}
+    placeholder={running ? 'Add a follow-up…' : 'Ask DeepSeek…'}
     {...commandMatches[completionIndex] === undefined ? {} : { completion: commandMatches[completionIndex] }}
     completionCount={commandMatches.length} onMoveCompletion={moveCompletion}
   />
@@ -355,10 +386,7 @@ function Composer({ controller, running, commands, attachments }: {
       <Box minWidth={0} flexShrink={1}>
         <Text color={running ? palette.active : palette.signal}>{running ? '◌ ' : '› '}</Text>
         <Box minWidth={0} flexGrow={1} flexShrink={1}>
-          {value === '' ? <>
-            {editor}
-            <Text dimColor>{running ? 'Add a follow-up…' : 'Ask DeepSeek…'}</Text>
-          </> : editor}
+          {editor}
         </Box>
       </Box>
     </Box>
