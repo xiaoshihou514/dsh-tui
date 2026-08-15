@@ -21,3 +21,11 @@ export function tailColumns(value: string, columns: number): string {
   }
   return `…${suffix.reverse().join('')}`
 }
+
+/** Find the start of the word immediately before a text cursor. */
+export function previousWordBoundary(value: string, cursor: number): number {
+  let index = Math.max(0, Math.min(cursor, value.length))
+  while (index > 0 && /\s/u.test(value[index - 1] ?? '')) index -= 1
+  while (index > 0 && !/\s/u.test(value[index - 1] ?? '')) index -= 1
+  return index
+}

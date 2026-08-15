@@ -8,7 +8,7 @@ import type { AskUserQuestionAnswerItem, AskUserQuestionItem } from '@deepseek-a
 import type { ModelChoice, SessionChoice, TuiController, TuiSnapshot } from './controller.ts'
 import type { TranscriptEntry } from './transcript.ts'
 import { Markdown } from './markdown.tsx'
-import { tailColumns } from './text-layout.ts'
+import { previousWordBoundary, tailColumns } from './text-layout.ts'
 
 const palette = {
   // ANSI names deliberately defer their actual appearance to the user's
@@ -197,7 +197,7 @@ interface CompletionChoice {
   readonly hint?: string
 }
 
-function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
+export function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completion, placeholder, completionCount, onMoveCompletion }: {
   value: string
   width: number
   onChange: (value: string) => void
@@ -209,38 +209,60 @@ function ComposerEditor({ value, width, onChange, onSubmit, onHistory, completio
   onMoveCompletion: (direction: -1 | 1) => void
 }): React.JSX.Element {
   const [cursor, setCursor] = useState(value.length)
+  const cursorRef = useRef(value.length)
+  const valueRef = useRef(value)
   const [screenCursor, setScreenCursor] = useState<CursorPosition>()
   const editorRef = useRef<DOMElement>(null)
   const { setCursorPosition } = useCursor()
   setCursorPosition(screenCursor)
-  useEffect(() => { setCursor(current => Math.min(current, value.length)) }, [value.length])
-  const replace = (next: string, nextCursor: number): void => { onChange(next); setCursor(nextCursor) }
+  useEffect(() => {
+    valueRef.current = value
+    const position = Math.min(cursorRef.current, value.length)
+    cursorRef.current = position
+    setCursor(position)
+  }, [value])
+  const move = (position: number): void => { cursorRef.current = position; setCursor(position) }
+  const replace = (next: string, nextCursor: number): void => {
+    valueRef.current = next
+    cursorRef.current = nextCursor
+    onChange(next)
+    setCursor(nextCursor)
+  }
   useInput((input, key) => {
+    const currentValue = valueRef.current
+    const position = cursorRef.current
     if ((input === 'c' && key.ctrl) || key.escape) return
     if ((key.tab || input === '\t') && completion !== undefined) {
       const next = `/${completion.name}${completion.hint === undefined ? '' : ' '}`
       replace(next, next.length)
       return
     }
-    if (value.startsWith('/') && completionCount > 0 && key.upArrow) { onMoveCompletion(-1); return }
-    if (value.startsWith('/') && completionCount > 0 && key.downArrow) { onMoveCompletion(1); return }
+    if (currentValue.startsWith('/') && completionCount > 0 && key.upArrow) { onMoveCompletion(-1); return }
+    if (currentValue.startsWith('/') && completionCount > 0 && key.downArrow) { onMoveCompletion(1); return }
     if (key.return) {
-      if (key.shift || key.meta) replace(`${value.slice(0, cursor)}\n${value.slice(cursor)}`, cursor + 1)
+      if (key.shift || key.meta) replace(`${currentValue.slice(0, position)}\n${currentValue.slice(position)}`, position + 1)
       else onSubmit()
       return
     }
-    if (key.upArrow && !value.includes('\n')) { onHistory(-1); return }
-    if (key.downArrow && !value.includes('\n')) { onHistory(1); return }
-    if (key.leftArrow) { setCursor(current => Math.max(0, current - 1)); return }
-    if (key.rightArrow) { setCursor(current => Math.min(value.length, current + 1)); return }
-    if (key.ctrl && input === 'a') { setCursor(0); return }
-    if (key.ctrl && input === 'e') { setCursor(value.length); return }
+    if (key.upArrow && !currentValue.includes('\n')) { onHistory(-1); return }
+    if (key.downArrow && !currentValue.includes('\n')) { onHistory(1); return }
+    if (key.home) { move(0); return }
+    if (key.end) { move(currentValue.length); return }
+    if (key.leftArrow || (key.ctrl && input === 'b')) { move(Math.max(0, position - 1)); return }
+    if (key.rightArrow || (key.ctrl && input === 'f')) { move(Math.min(currentValue.length, position + 1)); return }
+    if (key.ctrl && input === 'a') { move(0); return }
+    if (key.ctrl && input === 'e') { move(currentValue.length); return }
     if (key.ctrl && input === 'u') { replace('', 0); return }
-    if (key.backspace || key.delete) {
-      if (cursor > 0) replace(`${value.slice(0, cursor - 1)}${value.slice(cursor)}`, cursor - 1)
+    if ((key.ctrl && key.backspace) || (key.ctrl && input === 'w')) {
+      const start = previousWordBoundary(currentValue, position)
+      replace(`${currentValue.slice(0, start)}${currentValue.slice(position)}`, start)
       return
     }
-    if (input !== '') replace(`${value.slice(0, cursor)}${input}${value.slice(cursor)}`, cursor + input.length)
+    if (key.backspace || key.delete) {
+      if (position > 0) replace(`${currentValue.slice(0, position - 1)}${currentValue.slice(position)}`, position - 1)
+      return
+    }
+    if (input !== '') replace(`${currentValue.slice(0, position)}${input}${currentValue.slice(position)}`, position + input.length)
   })
   useLayoutEffect(() => {
     const element = editorRef.current
