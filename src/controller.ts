@@ -76,6 +76,31 @@ interface GoalChangeData {
   readonly roundsStarted?: number
 }
 
+type ControllerCommand = 'sessions' | 'new' | 'global' | 'model' | 'attach' | 'rename' | 'fork' | 'archive' | 'harness'
+
+interface ParsedCommand {
+  readonly name: Exclude<ControllerCommand, 'harness'>
+  readonly argument?: string
+}
+
+function parseCommand(prompt: string): ParsedCommand | undefined {
+  switch (prompt) {
+    case '/sessions': return { name: 'sessions' }
+    case '/new': return { name: 'new' }
+    case '/global': return { name: 'global' }
+    case '/model': return { name: 'model' }
+    case '/fork': return { name: 'fork' }
+    case '/archive': return { name: 'archive' }
+  }
+
+  const match = /^\/(attach|rename)(?:\s+(.+))?$/.exec(prompt)
+  if (match === null) return undefined
+  const name = match[1]
+  if (name !== 'attach' && name !== 'rename') return undefined
+  const argument = match[2]?.trim()
+  return { name, ...(argument === undefined ? {} : { argument }) }
+}
+
 function workspaceState(events: readonly SessionEvent[]): Pick<TuiSnapshot, 'planMode' | 'goal'> {
   let planMode = false
   let goal: TuiSnapshot['goal']
@@ -141,7 +166,7 @@ export class TuiController implements UserQuestionProvider {
   private identity: TuiSnapshot['identity']
   private panel: TuiSnapshot['panel']
   private notice: string | undefined
-  private command: ((command: 'sessions' | 'new' | 'global' | 'model' | 'attach' | 'rename' | 'fork' | 'archive' | 'harness', argument?: string) => void) | undefined
+  private command: ((command: ControllerCommand, argument?: string) => void) | undefined
   private userMessageSent: (() => void) | undefined
   private draftAttachments: ImageAttachmentRef[] = []
   private commands: readonly CommandDescriptor[] = []
@@ -236,22 +261,12 @@ export class TuiController implements UserQuestionProvider {
       this.emit()
       return
     }
-    const attachMatch = /^\/attach(?:\s+(.+))?$/.exec(prompt)
-    const renameMatch = /^\/rename(?:\s+(.+))?$/.exec(prompt)
-    const command = prompt === '/sessions' ? 'sessions'
-      : prompt === '/new' ? 'new'
-        : prompt === '/global' ? 'global'
-          : prompt === '/model' ? 'model'
-            : attachMatch !== null ? 'attach'
-              : renameMatch !== null ? 'rename'
-                : prompt === '/fork' ? 'fork'
-                  : prompt === '/archive' ? 'archive'
-                    : undefined
+    const command = parseCommand(prompt)
     if (command !== undefined) {
-      if (this.status === 'running' && command !== 'attach' && command !== 'rename') this.showNotice('Interrupt the active turn before changing session settings.')
-      else if (command === 'attach' && (attachMatch?.[1]?.trim() ?? '') === '') this.showNotice('Usage: /attach <image-path>')
-      else if (command === 'rename' && (renameMatch?.[1]?.trim() ?? '') === '') this.showNotice('Usage: /rename <title>')
-      else this.command?.(command, command === 'attach' ? attachMatch?.[1]?.trim() : renameMatch?.[1]?.trim())
+      if (this.status === 'running' && command.name !== 'attach' && command.name !== 'rename') this.showNotice('Interrupt the active turn before changing session settings.')
+      else if (command.name === 'attach' && command.argument === undefined) this.showNotice('Usage: /attach <image-path>')
+      else if (command.name === 'rename' && command.argument === undefined) this.showNotice('Usage: /rename <title>')
+      else this.command?.(command.name, command.argument)
       return
     }
     if (prompt.startsWith('/')) {
@@ -286,7 +301,7 @@ export class TuiController implements UserQuestionProvider {
   }
 
   /** Install runtime-owned session commands used by the local command palette. */
-  setCommandHandler(handler: (command: 'sessions' | 'new' | 'global' | 'model' | 'attach' | 'rename' | 'fork' | 'archive' | 'harness', argument?: string) => void): () => void {
+  setCommandHandler(handler: (command: ControllerCommand, argument?: string) => void): () => void {
     this.command = handler
     return () => { if (this.command === handler) this.command = undefined }
   }

@@ -530,13 +530,20 @@ function StatusBar({ snapshot, spinner }: { snapshot: TuiSnapshot; spinner: stri
   </Box>
 }
 
+function goalPhaseColor(phase: NonNullable<TuiSnapshot['goal']>['phase'] | undefined): string {
+  switch (phase) {
+    case 'blocked': return palette.danger
+    case 'complete': return palette.success
+    default: return palette.active
+  }
+}
+
 function ActivityStrip({ snapshot }: { snapshot: TuiSnapshot }): React.JSX.Element | null {
   const { todos, goal, planMode } = snapshot
   if (todos.length === 0 && goal === undefined && !planMode) return null
   const completed = todos.filter(todo => todo.status === 'completed').length
   const active = todos.find(todo => todo.status === 'in_progress')
-  const phaseColor = goal?.phase === 'blocked' ? palette.danger
-    : goal?.phase === 'complete' ? palette.success : palette.active
+  const phaseColor = goalPhaseColor(goal?.phase)
   return <Box marginTop={1} paddingX={1} flexDirection="column" borderStyle="single" borderColor={palette.faint}>
     {goal === undefined ? null : <Box justifyContent="space-between">
       <Text color={palette.quiet}>GOAL <Text color={phaseColor}>{goal.phase.toUpperCase()}</Text> · round {goal.roundsStarted}/{goal.maxGoalRounds}</Text>
